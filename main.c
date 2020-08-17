@@ -34,6 +34,8 @@ int news;
 int led1, led2, led3, led4;
 int leds;
 bool conected = false;
+volatile sig_atomic_t runn=1;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 struct sigaction sign_action_1, sign_action_2;
 
@@ -43,22 +45,14 @@ static void UnblockSignals(void);
 
 static void SigInt_handler()
 {
-	write(1, "\nCtrl+c pressed!!\n", 18);
-	if (0 != pthread_cancel(thread_TCP))
-	{
-		perror("Error");
-	}
-	exit(EXIT_SUCCESS);
+	write(1, "\nCtrl+c pressed!!\n",18);
+	runn = 1;
 }
 
 static void SigTerm_handler()
 {
 	write(1, "Sigterm received!\n", 18);
-	if (0 != pthread_cancel(thread_TCP))
-	{
-		perror("Error");
-	}
-	exit(EXIT_SUCCESS);
+	runn = 1;
 }
 
 int main(void)
@@ -150,23 +144,24 @@ int main(void)
 	printf("SE CREO CORRECTAMENTE TASKTCP\n\n");
 	//
 
-	for (;;)
+	while (runn)
 	{
-		while (conected)
+		int SerialRX;
+		int led;
+
+		if (SerialRX = serial_receive(PortSerialbuff, BUFFER_SIZE))
 		{
-			int SerialRX;
-			int led;
+			printf("SE RECIBIO MENSAJE DEL SERIALPORT\n");
 
-			if (SerialRX = serial_receive(PortSerialbuff, BUFFER_SIZE))
+			sscanf(PortSerialbuff, "%[>TOGGLE STATE:]%d", msg_header, &led);
+			if (strcmp(msg_header, ">TOGGLE STATE:") != 0)
 			{
-				printf("SE RECIBIO MENSAJE DEL SERIALPORT\n");
-
-				sscanf(PortSerialbuff, "%[>TOGGLE STATE:]%d", msg_header, &led);
-				if (strcmp(msg_header, ">TOGGLE STATE:") != 0)
-				{
-					perror("MENSAJE INCORRECTO");
-				}
-				else
+				perror("MENSAJE INCORRECTO");
+			}
+			else
+			{
+				pthread_mutex_lock(&mutex);
+				if (conected)
 				{
 					sprintf(PortSerialbuff, ":LINE%dTG\n", led);
 					memset(msg_header, 0, strlen(msg_header));
@@ -176,14 +171,28 @@ int main(void)
 						perror("ERROR DE WRITE");
 					}
 				}
+
+				pthread_mutex_unlock(&mutex);
 			}
 		}
 	}
+
+	// SALIR DEL PROCESO
+	if ( 0 != pthread_cancel(thread_TCP) )
+	{
+		perror("Error");
+	}
+
+	if ( 0 != pthread_join(thread_TCP, NULL) )
+	{
+		perror("Error");
+	}
+	exit(0);
 }
 
 void *task_TCP(void *param)
 {
-	for (;;)
+	while (runn)
 	{
 		addr_len = sizeof(struct sockaddr_in);
 		if ((news = accept(s, (struct sockaddr *)&clientaddr, &addr_len)) == -1)
@@ -194,7 +203,9 @@ void *task_TCP(void *param)
 
 		inet_ntop(AF_INET, &(clientaddr.sin_addr), IpClient, sizeof(IpClient));
 		printf("CONEXION CON IP: %s\n", IpClient);
+		pthread_mutex_lock(&mutex);
 		conected = true;
+		pthread_mutex_unlock(&mutex);
 		do
 		{
 			if ((bytesRead = read(news, TCPbuff, BUFFER_SIZE)) == -1)
@@ -204,8 +215,9 @@ void *task_TCP(void *param)
 			else
 			{
 				TCPbuff[bytesRead] = '\0';
+				//pthread_mutex_lock(&mutex);
 				sscanf(TCPbuff, "%[:STATES]%d", msg_header, &leds);
-
+				//pthread_mutex_unlock(&mutex);
 				if (strcmp(msg_header, ":STATES") != 0)
 				{
 					perror("MENSAJE INVALIDO");
