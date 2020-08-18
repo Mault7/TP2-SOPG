@@ -34,7 +34,7 @@ int news;
 int led1, led2, led3, led4;
 int leds;
 bool conected = false;
-volatile sig_atomic_t runn=1;
+volatile sig_atomic_t runn = 1;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 struct sigaction sign_action_1, sign_action_2;
@@ -45,7 +45,7 @@ static void UnblockSignals(void);
 
 static void SigInt_handler()
 {
-	write(1, "\nCtrl+c pressed!!\n",18);
+	write(1, "\nCtrl+c pressed!!\n", 18);
 	runn = 1;
 }
 
@@ -134,6 +134,8 @@ int main(void)
 	printf("PUERTO SERIE ABIERTO\n\n");
 	//
 
+	BlockSignals();
+
 	//CREACION DE UN HILO
 	int ret = pthread_create(&thread_TCP, NULL, task_TCP, NULL);
 	if (ret == 1)
@@ -143,6 +145,8 @@ int main(void)
 	}
 	printf("SE CREO CORRECTAMENTE TASKTCP\n\n");
 	//
+	
+	UnblockSignals();
 
 	while (runn)
 	{
@@ -178,12 +182,12 @@ int main(void)
 	}
 
 	// SALIR DEL PROCESO
-	if ( 0 != pthread_cancel(thread_TCP) )
+	if (0 != pthread_cancel(thread_TCP))
 	{
 		perror("Error");
 	}
 
-	if ( 0 != pthread_join(thread_TCP, NULL) )
+	if (0 != pthread_join(thread_TCP, NULL))
 	{
 		perror("Error");
 	}
